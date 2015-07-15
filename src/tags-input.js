@@ -46,9 +46,10 @@
  * @param {expression=} [onTagRemoved=NA] Expression to evaluate upon removing an existing tag. The removed tag is
  *    available as $tag.
  * @param {expression=} [onTagClicked=NA] Expression to evaluate upon clicking an existing tag. The clicked tag is available as $tag.
+ * @param {expression=} [onRemoteValidate=NA] Expression to evaluate upon for remotely validating.  The return must be truthy.  The tag is available as $tag.
  */
-tagsInput.directive('tagsInput', function($timeout, $document, $window, tagsInputConfig, tiUtil) {
-    function TagList(options, events, onTagAdding, onTagRemoving) {
+tagsInput.directive('tagsInput', function($timeout, $document, $window, tagsInputConfig, tiUtil, $q) {
+    function TagList(options, events, onTagAdding, onTagRemoving, onRemoteValidate) {
         var self = {}, getTagText, setTagText, tagIsValid;
 
         getTagText = function(tag) {
@@ -87,12 +88,25 @@ tagsInput.directive('tagsInput', function($timeout, $document, $window, tagsInpu
 
             setTagText(tag, tagText);
 
-            if (tagIsValid(tag)) {
-                self.items.push(tag);
-                events.trigger('tag-added', { $tag: tag });
-            }
-            else if (tagText) {
-                events.trigger('invalid-tag', { $tag: tag });
+            if (!onRemoteValidate) {
+                if (tagIsValid(tag)) {
+                    self.items.push(tag);
+                    events.trigger('tag-added', { $tag: tag });
+                }
+                else if (tagText) {
+                    events.trigger('invalid-tag', { $tag: tag });
+                }
+            } else {
+                var promise = $q.when(onRemoteValidate({ $tag: tag }));
+                promise.then(function (isValid) {
+                    if (isValid) {
+                        self.items.push(tag);
+                        events.trigger('tag-added', { $tag: tag });
+                        return tag;
+                    }
+
+                    events.trigger('invalid-tag', { $tag: tag });
+                });
             }
 
             return tag;
@@ -158,7 +172,8 @@ tagsInput.directive('tagsInput', function($timeout, $document, $window, tagsInpu
             onInvalidTag: '&',
             onTagRemoving: '&',
             onTagRemoved: '&',
-            onTagClicked: '&'
+            onTagClicked: '&',
+            onRemoteValidate: '&'
         },
         replace: false,
         transclude: true,
